@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform/internal/configs"
 	"github.com/hashicorp/terraform/internal/states"
 	"github.com/hashicorp/terraform/internal/tfdiags"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // AddCommand is a Command implementation that generates resource configuration templates.
@@ -233,7 +234,14 @@ func (c *AddCommand) Run(rawArgs []string) int {
 		}
 	}
 
-	diags = diags.Append(view.Resource(args.Addr, schema, providerLocalName, rio.Value))
+	var val cty.Value
+	if rio != nil {
+		val = rio.Value
+	} else {
+		val = cty.NilVal
+	}
+
+	diags = diags.Append(view.Resource(args.Addr, schema, providerLocalName, val))
 	if diags.HasErrors() {
 		c.View.Diagnostics(diags)
 		return 1

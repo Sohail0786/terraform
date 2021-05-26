@@ -65,7 +65,7 @@ func TestAdd_basic(t *testing.T) {
 `
 
 		if !cmp.Equal(output.Stdout(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 		}
 	})
 
@@ -91,7 +91,7 @@ func TestAdd_basic(t *testing.T) {
 `
 
 		if !cmp.Equal(output.Stdout(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 		}
 	})
 
@@ -118,7 +118,7 @@ func TestAdd_basic(t *testing.T) {
 `
 
 		if !cmp.Equal(output.Stdout(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 		}
 	})
 
@@ -299,7 +299,7 @@ func TestAdd(t *testing.T) {
 `
 
 		if !cmp.Equal(output.Stdout(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 		}
 
 	})
@@ -328,7 +328,7 @@ func TestAdd(t *testing.T) {
 `
 
 		if !cmp.Equal(output.Stdout(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 		}
 	})
 
@@ -354,7 +354,7 @@ func TestAdd(t *testing.T) {
 `
 
 		if !cmp.Equal(output.Stdout(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 		}
 	})
 
@@ -382,7 +382,7 @@ func TestAdd(t *testing.T) {
 `
 
 		if !cmp.Equal(output.Stdout(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 		}
 	})
 }
@@ -493,7 +493,7 @@ func TestAdd_from_state(t *testing.T) {
 `
 
 	if !cmp.Equal(output.Stdout(), expected) {
-		t.Fatalf("wrong output:\n%s", cmp.Diff(output.Stdout(), expected))
+		t.Fatalf("wrong output:\n%s", cmp.Diff(expected, output.Stdout()))
 	}
 
 }

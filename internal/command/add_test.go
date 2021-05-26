@@ -478,16 +478,16 @@ func TestAdd_from_state(t *testing.T) {
 	}
 
 	expected := `resource "test_instance" "new" {
-  ami = "ami-123456"      # OPTIONAL string
-  disks = [{              # OPTIONAL list of object
-    mount_point = "diska" # REQUIRED string
-    size        = null    # OPTIONAL string
+  ami = "ami-123456"
+  disks = [{
+    mount_point = "diska"
+    size        = null
   }]         
-  id    = "bar"   # OPTIONAL string
-  value = "bloop" # REQUIRED string
+  id    = "bar"
+  value = "bloop"
   network_interface {
-    description  = null # OPTIONAL string
-    device_index = null # OPTIONAL string
+    description  = null
+    device_index = null
   }
 }
 `

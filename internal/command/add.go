@@ -24,21 +24,12 @@ func (c *AddCommand) Run(rawArgs []string) int {
 	// Parse and apply global view arguments
 	common, rawArgs := arguments.ParseView(rawArgs)
 	c.View.Configure(common)
-
 	args, diags := arguments.ParseAdd(rawArgs)
+	view := views.NewAdd(args.ViewType, c.View, args)
 	if diags.HasErrors() {
-		// since the error occured while parsing arguments, we might not have a view type selected.
-		var view views.Add
-		if args.ViewType == arguments.ViewNone {
-			view = views.NewAdd(arguments.ViewHuman, c.View, args)
-		} else {
-			view = views.NewAdd(args.ViewType, c.View, args)
-		}
 		view.Diagnostics(diags)
 		return 1
 	}
-
-	view := views.NewAdd(args.ViewType, c.View, args)
 
 	// Check for user-supplied plugin path
 	var err error
@@ -76,10 +67,7 @@ func (c *AddCommand) Run(rawArgs []string) int {
 		return 1
 	}
 
-	// This is a read-only command.
-	//
-	// TODO: This will not be true when -import is implemented and used, so this
-	// will be wrapped in a conditional.
+	// This is a read-only command (until -import is implemented)
 	c.ignoreRemoteBackendVersionConflict(b)
 
 	cwd, err := os.Getwd()
@@ -97,7 +85,6 @@ func (c *AddCommand) Run(rawArgs []string) int {
 	opReq := c.Operation(b)
 	opReq.AllowUnsetVariables = true
 	opReq.ConfigDir = cwd
-
 	opReq.ConfigLoader, err = c.initConfigLoader()
 	if err != nil {
 		diags = diags.Append(tfdiags.Sourceless(
@@ -246,7 +233,7 @@ func (c *AddCommand) Run(rawArgs []string) int {
 		}
 	}
 
-	diags = diags.Append(view.Resource(args.Addr, schema, providerLocalName, rio))
+	diags = diags.Append(view.Resource(args.Addr, schema, providerLocalName, rio.Value))
 	if diags.HasErrors() {
 		c.View.Diagnostics(diags)
 		return 1

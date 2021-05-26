@@ -27,17 +27,17 @@ func TestParseAdd(t *testing.T) {
 			``,
 		},
 		"some flags": {
-			[]string{"-optional=true", "-json", "test_foo.bar"},
+			[]string{"-optional=true", "test_foo.bar"},
 			&Add{
 				Addr:     mustResourceInstanceAddr("test_foo.bar"),
 				State:    &State{Lock: true},
 				Optional: true,
-				ViewType: ViewJSON,
+				ViewType: ViewHuman,
 			},
 			``,
 		},
-		"-from-existing-resource": {
-			[]string{"-from-existing-resource=test_foo.bar", "module.foo.test_foo.baz"},
+		"-from-state": {
+			[]string{"-from-state=test_foo.bar", "module.foo.test_foo.baz"},
 			&Add{
 				Addr:             mustResourceInstanceAddr("module.foo.test_foo.baz"),
 				State:            &State{Lock: true},
@@ -67,7 +67,7 @@ func TestParseAdd(t *testing.T) {
 			`Too few command line arguments`,
 		},
 		"too many arguments": {
-			[]string{"-from-existing-resource=resource_foo.baz", "resource_foo.bar", "module.foo.resource_foo.baz"},
+			[]string{"-from-state=resource_foo.baz", "resource_foo.bar", "module.foo.resource_foo.baz"},
 			&Add{
 				ViewType: ViewHuman,
 				State:    &State{Lock: true},
@@ -91,7 +91,7 @@ func TestParseAdd(t *testing.T) {
 			`Invalid provider string: /this/isn't/quite/correct`,
 		},
 		"resource type mismatch": {
-			[]string{"-from-existing-resource=test_foo.bar", "test_compute.bar"},
+			[]string{"-from-state=test_foo.bar", "test_compute.bar"},
 			&Add{ViewType: ViewHuman,
 				Addr:             mustResourceInstanceAddr("test_compute.bar"),
 				State:            &State{Lock: true},

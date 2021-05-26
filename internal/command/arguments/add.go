@@ -35,15 +35,13 @@ type Add struct {
 
 func ParseAdd(args []string) (*Add, tfdiags.Diagnostics) {
 	var diags tfdiags.Diagnostics
-	add := &Add{State: &State{}}
+	add := &Add{State: &State{}, ViewType: ViewHuman}
 
-	var jsonOutput bool
 	var provider string
 	var fromAddr string
 
 	cmdFlags := extendedFlagSet("add", add.State, nil, nil)
 	cmdFlags.StringVar(&fromAddr, "from-state", "", "fill attribute values from a resource already managed by terraform")
-	cmdFlags.BoolVar(&jsonOutput, "json", false, "json")
 	cmdFlags.BoolVar(&add.Optional, "optional", false, "include optional attributes")
 	cmdFlags.StringVar(&add.OutPath, "out", "", "out")
 	cmdFlags.StringVar(&provider, "provider", "", "provider")
@@ -55,13 +53,6 @@ func ParseAdd(args []string) (*Add, tfdiags.Diagnostics) {
 			err.Error(),
 		))
 		return add, diags
-	}
-
-	switch {
-	case jsonOutput:
-		add.ViewType = ViewJSON
-	default:
-		add.ViewType = ViewHuman
 	}
 
 	if provider != "" {
@@ -118,7 +109,7 @@ func ParseAdd(args []string) (*Add, tfdiags.Diagnostics) {
 			diags = diags.Append(tfdiags.Sourceless(
 				tfdiags.Error,
 				fmt.Sprintf("Error parsing resource address: %s", stateAddr),
-				fmt.Sprintf("Error parsing -from-existing-resource address: %s", addrDiags.Err().Error()),
+				fmt.Sprintf("Error parsing -from-state address: %s", addrDiags.Err().Error()),
 			))
 			return add, diags
 		}
@@ -128,7 +119,7 @@ func ParseAdd(args []string) (*Add, tfdiags.Diagnostics) {
 			diags = diags.Append(tfdiags.Sourceless(
 				tfdiags.Error,
 				"Resource type mismatch",
-				"The target address and -from-existing-resource address must have the same resource type.",
+				"The target address and -from-state address must have the same resource type.",
 			))
 			return add, diags
 		}

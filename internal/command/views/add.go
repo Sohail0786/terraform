@@ -1,7 +1,6 @@
 package views
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,50 +9,23 @@ import (
 	"github.com/hashicorp/terraform/internal/addrs"
 	"github.com/hashicorp/terraform/internal/command/arguments"
 	"github.com/hashicorp/terraform/internal/configs/configschema"
-	"github.com/hashicorp/terraform/internal/states"
 	"github.com/hashicorp/terraform/internal/tfdiags"
 	"github.com/zclconf/go-cty/cty"
 )
 
 // Add is the view interface for the "terraform add" command.
 type Add interface {
-	Resource(addrs.AbsResourceInstance, *configschema.Block, string, *states.ResourceInstanceObject) error
+	Resource(addrs.AbsResourceInstance, *configschema.Block, string, cty.Value) error
 	Diagnostics(tfdiags.Diagnostics)
 }
 
 // NewAdd returns an initialized Validate implementation for the given ViewType.
 func NewAdd(vt arguments.ViewType, view *View, args *arguments.Add) Add {
-	switch vt {
-	case arguments.ViewJSON:
-		return &addJSON{
-			view:     view,
-			optional: args.Optional,
-			outPath:  args.OutPath,
-		}
-	case arguments.ViewHuman:
-		return &addHuman{
-			view:     view,
-			optional: args.Optional,
-			outPath:  args.OutPath,
-		}
-	default:
-		panic(fmt.Sprintf("unknown view type %v", vt))
+	return &addHuman{
+		view:     view,
+		optional: args.Optional,
+		outPath:  args.OutPath,
 	}
-}
-
-type addJSON struct {
-	view     *View
-	optional bool
-	outPath  string
-}
-
-func (v *addJSON) Resource(addr addrs.AbsResourceInstance, schema *configschema.Block, provider string, state *states.ResourceInstanceObject) error {
-	//render resources as json
-	return nil
-}
-
-func (v *addJSON) Diagnostics(diags tfdiags.Diagnostics) {
-	v.view.Diagnostics(diags)
 }
 
 type addHuman struct {
@@ -62,29 +34,39 @@ type addHuman struct {
 	outPath  string
 }
 
-func (v *addHuman) Resource(addr addrs.AbsResourceInstance, schema *configschema.Block, provider string, state *states.ResourceInstanceObject) error {
-	var buf bytes.Buffer
+func (v *addHuman) Resource(addr addrs.AbsResourceInstance, schema *configschema.Block, provider string, stateVal cty.Value) error {
+	var buf strings.Builder
 	buf.WriteString(fmt.Sprintf("resource %q %q {\n", addr.Resource.Resource.Type, addr.Resource.Resource.Name))
 	if provider != "" {
 		buf.WriteString(strings.Repeat(" ", 2))
 		buf.WriteString(fmt.Sprintf("provider = %s\n", provider))
 	}
 
-	err := v.writeConfigAttributes(&buf, state, schema.Attributes, 2)
-	if err != nil {
-		return err
-	}
-
-	err = v.writeConfigBlocks(&buf, state, schema.BlockTypes, 2)
-	if err != nil {
-		return err
+	if stateVal.RawEquals(cty.NilVal) {
+		err := v.writeConfigAttributes(&buf, schema.Attributes, 2)
+		if err != nil {
+			return err
+		}
+		err = v.writeConfigBlocks(&buf, schema.BlockTypes, 2)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := v.writeConfigAttributesFromExisting(&buf, stateVal, schema.Attributes, 2)
+		if err != nil {
+			return err
+		}
+		err = v.writeConfigBlocksFromExisting(&buf, stateVal, schema.BlockTypes, 2)
+		if err != nil {
+			return err
+		}
 	}
 
 	buf.WriteString("}")
 
 	// The output better be valid HCL which can be parsed and formatted.
 	formatted := hclwrite.Format([]byte(buf.String()))
-	_, err = v.view.streams.Println(string(formatted))
+	_, err := v.view.streams.Println(string(formatted))
 
 	return err
 }
@@ -93,7 +75,7 @@ func (v *addHuman) Diagnostics(diags tfdiags.Diagnostics) {
 	v.view.Diagnostics(diags)
 }
 
-func (v *addHuman) writeConfigAttributes(buf *bytes.Buffer, state *states.ResourceInstanceObject, attrs map[string]*configschema.Attribute, indent int) error {
+func (v *addHuman) writeConfigAttributes(buf *strings.Builder, attrs map[string]*configschema.Attribute, indent int) error {
 	if len(attrs) == 0 {
 		return nil
 	}
@@ -109,7 +91,7 @@ func (v *addHuman) writeConfigAttributes(buf *bytes.Buffer, state *states.Resour
 		name := keys[i]
 		attrS := attrs[name]
 		if attrS.NestedType != nil {
-			err := v.writeConfigNestedTypeAttribute(buf, state, name, attrS, indent)
+			err := v.writeConfigNestedTypeAttribute(buf, name, attrS, indent)
 			if err != nil {
 				return err
 			}
@@ -119,16 +101,14 @@ func (v *addHuman) writeConfigAttributes(buf *bytes.Buffer, state *states.Resour
 			buf.WriteString(strings.Repeat(" ", indent))
 			buf.WriteString(fmt.Sprintf("%s = ", name))
 
-			var val cty.Value
-			if state != nil && state.Value.Type().HasAttribute(name) {
-				val = state.Value.GetAttr(name)
+			if attrS.Sensitive {
+				buf.WriteString("(sensitive)")
 			} else {
-				val = attrS.EmptyValue()
-			}
-			tok := hclwrite.TokensForValue(val)
-			_, err := tok.WriteTo(buf)
-			if err != nil {
-				return err
+				tok := hclwrite.TokensForValue(attrS.EmptyValue())
+				_, err := tok.WriteTo(buf)
+				if err != nil {
+					return err
+				}
 			}
 			writeAttrTypeConstraint(buf, attrS)
 
@@ -136,16 +116,14 @@ func (v *addHuman) writeConfigAttributes(buf *bytes.Buffer, state *states.Resour
 			buf.WriteString(strings.Repeat(" ", indent))
 			buf.WriteString(fmt.Sprintf("%s = ", name))
 
-			var val cty.Value
-			if state != nil && state.Value.Type().HasAttribute(name) {
-				val = state.Value.GetAttr(name)
+			if attrS.Sensitive {
+				buf.WriteString("(sensitive)")
 			} else {
-				val = attrS.EmptyValue()
-			}
-			tok := hclwrite.TokensForValue(val)
-			_, err := tok.WriteTo(buf)
-			if err != nil {
-				return err
+				tok := hclwrite.TokensForValue(attrS.EmptyValue())
+				_, err := tok.WriteTo(buf)
+				if err != nil {
+					return err
+				}
 			}
 			writeAttrTypeConstraint(buf, attrS)
 		}
@@ -153,7 +131,73 @@ func (v *addHuman) writeConfigAttributes(buf *bytes.Buffer, state *states.Resour
 	return nil
 }
 
-func (v *addHuman) writeConfigBlocks(buf *bytes.Buffer, state *states.ResourceInstanceObject, blocks map[string]*configschema.NestedBlock, indent int) error {
+func (v *addHuman) writeConfigAttributesFromExisting(buf *strings.Builder, stateVal cty.Value, attrs map[string]*configschema.Attribute, indent int) error {
+	if len(attrs) == 0 {
+		return nil
+	}
+
+	// Get a list of sorted attribute names so the output will be consistent between runs.
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for i := range keys {
+		name := keys[i]
+		attrS := attrs[name]
+		if attrS.NestedType != nil {
+			err := v.writeConfigNestedTypeAttributeFromExisting(buf, name, attrS, stateVal, indent)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if attrS.Required {
+			buf.WriteString(strings.Repeat(" ", indent))
+			buf.WriteString(fmt.Sprintf("%s = ", name))
+
+			if attrS.Sensitive {
+				buf.WriteString("(sensitive)")
+			} else {
+				var val cty.Value
+				if stateVal.Type().HasAttribute(name) {
+					val = stateVal.GetAttr(name)
+				} else {
+					val = attrS.EmptyValue()
+				}
+				tok := hclwrite.TokensForValue(val)
+				_, err := tok.WriteTo(buf)
+				if err != nil {
+					return err
+				}
+			}
+
+		} else if attrS.Optional && v.optional {
+			buf.WriteString(strings.Repeat(" ", indent))
+			buf.WriteString(fmt.Sprintf("%s = ", name))
+
+			if attrS.Sensitive {
+				buf.WriteString("(sensitive)")
+			} else {
+				var val cty.Value
+				if !stateVal.RawEquals(cty.NilVal) && stateVal.Type().HasAttribute(name) {
+					val = stateVal.GetAttr(name)
+				} else {
+					val = attrS.EmptyValue()
+				}
+				tok := hclwrite.TokensForValue(val)
+				_, err := tok.WriteTo(buf)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *addHuman) writeConfigBlocks(buf *strings.Builder, blocks map[string]*configschema.NestedBlock, indent int) error {
 	if len(blocks) == 0 {
 		return nil
 	}
@@ -173,10 +217,10 @@ func (v *addHuman) writeConfigBlocks(buf *bytes.Buffer, state *states.ResourceIn
 			buf.WriteString(strings.Repeat(" ", indent))
 			buf.WriteString(fmt.Sprintf("%s {\n", name))
 			if len(blockS.Attributes) > 0 {
-				v.writeConfigAttributes(buf, state, blockS.Attributes, indent+2)
+				v.writeConfigAttributes(buf, blockS.Attributes, indent+2)
 			}
 			if len(blockS.BlockTypes) > 0 {
-				v.writeConfigBlocks(buf, state, blockS.BlockTypes, indent+2)
+				v.writeConfigBlocks(buf, blockS.BlockTypes, indent+2)
 			}
 			buf.WriteString(strings.Repeat(" ", indent))
 			buf.WriteString("}\n")
@@ -185,7 +229,7 @@ func (v *addHuman) writeConfigBlocks(buf *bytes.Buffer, state *states.ResourceIn
 	return nil
 }
 
-func (v *addHuman) writeConfigNestedTypeAttribute(buf *bytes.Buffer, state *states.ResourceInstanceObject, name string, schema *configschema.Attribute, indent int) error {
+func (v *addHuman) writeConfigNestedTypeAttribute(buf *strings.Builder, name string, schema *configschema.Attribute, indent int) error {
 	if schema.Required == false && v.optional == false {
 		return nil
 	}
@@ -193,19 +237,17 @@ func (v *addHuman) writeConfigNestedTypeAttribute(buf *bytes.Buffer, state *stat
 	buf.WriteString(strings.Repeat(" ", indent))
 	buf.WriteString(fmt.Sprintf("%s = ", name))
 
-	// FIXME: populating with existing state is not yet implemented.
-
 	switch schema.NestedType.Nesting {
 	case configschema.NestingSingle:
 		buf.WriteString("{")
 		writeAttrTypeConstraint(buf, schema)
-		v.writeConfigAttributes(buf, state, schema.NestedType.Attributes, indent+2)
+		v.writeConfigAttributes(buf, schema.NestedType.Attributes, indent+2)
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString("}\n")
 	case configschema.NestingList, configschema.NestingSet:
 		buf.WriteString("[{")
 		writeAttrTypeConstraint(buf, schema)
-		v.writeConfigAttributes(buf, state, schema.NestedType.Attributes, indent+2)
+		v.writeConfigAttributes(buf, schema.NestedType.Attributes, indent+2)
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString("}]\n")
 	case configschema.NestingMap:
@@ -213,7 +255,7 @@ func (v *addHuman) writeConfigNestedTypeAttribute(buf *bytes.Buffer, state *stat
 		writeAttrTypeConstraint(buf, schema)
 		buf.WriteString(strings.Repeat(" ", indent+2))
 		buf.WriteString("key = {\n")
-		v.writeConfigAttributes(buf, state, schema.NestedType.Attributes, indent+4)
+		v.writeConfigAttributes(buf, schema.NestedType.Attributes, indent+4)
 		buf.WriteString(strings.Repeat(" ", indent+2))
 		buf.WriteString("}\n")
 		buf.WriteString(strings.Repeat(" ", indent))
@@ -223,7 +265,46 @@ func (v *addHuman) writeConfigNestedTypeAttribute(buf *bytes.Buffer, state *stat
 	return nil
 }
 
-func writeAttrTypeConstraint(buf *bytes.Buffer, schema *configschema.Attribute) {
+func (v *addHuman) writeConfigBlocksFromExisting(buf *strings.Builder, stateVal cty.Value, blocks map[string]*configschema.NestedBlock, indent int) error {
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	// Get a list of sorted block names so the output will be consistent between runs.
+	names := make([]string, 0, len(blocks))
+	for k := range blocks {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		blockS := blocks[name]
+		blockVal := stateVal.GetAttr(name)
+		v.writeConfigNestedBlockFromExisting(buf, name, blockS, blockVal, indent)
+	}
+
+	return nil
+}
+
+func (v *addHuman) writeConfigNestedTypeAttributeFromExisting(buf *strings.Builder, name string, schema *configschema.Attribute, stateVal cty.Value, indent int) error {
+	return nil
+}
+
+func (v *addHuman) writeConfigNestedBlockFromExisting(buf *strings.Builder, name string, schema *configschema.NestedBlock, stateVal cty.Value, indent int) error {
+	switch schema.Nesting {
+	case configschema.NestingSingle, configschema.NestingGroup:
+		buf.WriteString(fmt.Sprintf("%s {\n", name))
+		v.writeConfigAttributesFromExisting(buf, stateVal, schema.Attributes, indent+2)
+		v.writeConfigBlocksFromExisting(buf, stateVal, schema.BlockTypes, indent+2)
+		buf.WriteString("\n}\n")
+		return nil
+	}
+
+	return nil
+
+}
+
+func writeAttrTypeConstraint(buf *strings.Builder, schema *configschema.Attribute) {
 	if schema.Required {
 		buf.WriteString(" # REQUIRED ")
 	} else {

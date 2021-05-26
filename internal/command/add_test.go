@@ -54,10 +54,11 @@ func TestAdd_basic(t *testing.T) {
 		}
 		args := []string{"test_instance.new"}
 		code := c.Run(args)
+		output := done(t)
 		if code != 0 {
+			fmt.Println(output.Stderr())
 			t.Fatalf("wrong exit status. Got %d, want 0", code)
 		}
-		output := done(t)
 		expected := `resource "test_instance" "new" {
   value = null # REQUIRED string
 }

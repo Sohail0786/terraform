@@ -95,28 +95,17 @@ func (v *addHuman) writeConfigAttributes(buf *strings.Builder, attrs map[string]
 		if attrS.Required {
 			buf.WriteString(strings.Repeat(" ", indent))
 			buf.WriteString(fmt.Sprintf("%s = ", name))
-
-			if attrS.Sensitive {
-				buf.WriteString("(sensitive)")
-			} else {
-				tok := hclwrite.TokensForValue(attrS.EmptyValue())
-				if _, err := tok.WriteTo(buf); err != nil {
-					return err
-				}
+			tok := hclwrite.TokensForValue(attrS.EmptyValue())
+			if _, err := tok.WriteTo(buf); err != nil {
+				return err
 			}
 			writeAttrTypeConstraint(buf, attrS)
-
 		} else if attrS.Optional && v.optional {
 			buf.WriteString(strings.Repeat(" ", indent))
 			buf.WriteString(fmt.Sprintf("%s = ", name))
-
-			if attrS.Sensitive {
-				buf.WriteString("(sensitive)")
-			} else {
-				tok := hclwrite.TokensForValue(attrS.EmptyValue())
-				if _, err := tok.WriteTo(buf); err != nil {
-					return err
-				}
+			tok := hclwrite.TokensForValue(attrS.EmptyValue())
+			if _, err := tok.WriteTo(buf); err != nil {
+				return err
 			}
 			writeAttrTypeConstraint(buf, attrS)
 		}
@@ -251,6 +240,7 @@ func (v *addHuman) writeConfigNestedTypeAttribute(buf *strings.Builder, name str
 		}
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString("}\n")
+		return nil
 	case configschema.NestingList, configschema.NestingSet:
 		buf.WriteString("[{")
 		writeAttrTypeConstraint(buf, schema)
@@ -259,6 +249,7 @@ func (v *addHuman) writeConfigNestedTypeAttribute(buf *strings.Builder, name str
 		}
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString("}]\n")
+		return nil
 	case configschema.NestingMap:
 		buf.WriteString("{")
 		writeAttrTypeConstraint(buf, schema)
@@ -271,9 +262,11 @@ func (v *addHuman) writeConfigNestedTypeAttribute(buf *strings.Builder, name str
 		buf.WriteString("}\n")
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString("}\n")
+		return nil
+	default:
+		// This should not happen, the above should be exhaustive.
+		return fmt.Errorf("unsupported NestingMode %s", schema.NestedType.Nesting.String())
 	}
-
-	return nil
 }
 
 func (v *addHuman) writeConfigBlocksFromExisting(buf *strings.Builder, stateVal cty.Value, blocks map[string]*configschema.NestedBlock, indent int) error {

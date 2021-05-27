@@ -11,13 +11,161 @@ import (
 )
 
 func TestAdd_writeConfigAttributes(t *testing.T) {
-	// v := addHuman{optional: true}
-	// attrs := map[string]*configschema.Attributes{}
+	tests := map[string]struct {
+		attrs    map[string]*configschema.Attribute
+		expected string
+	}{
+		"empty returns nil": {
+			map[string]*configschema.Attribute{},
+			"",
+		},
+		"attributes": {
+			map[string]*configschema.Attribute{
+				"ami": {
+					Type:     cty.Number,
+					Required: true,
+				},
+				"boot_disk": {
+					Type:     cty.String,
+					Optional: true,
+				},
+				"password": {
+					Type:      cty.String,
+					Optional:  true,
+					Sensitive: true, // sensitivity is ignored when printing blank templates
+				},
+			},
+			`ami = null # REQUIRED number
+boot_disk = null # OPTIONAL string
+password = null # OPTIONAL string
+`,
+		},
+		"attributes with nested types": {
+			map[string]*configschema.Attribute{
+				"ami": {
+					Type:     cty.Number,
+					Required: true,
+				},
+				"disks": {
+					NestedType: &configschema.Object{
+						Nesting: configschema.NestingSingle,
+						Attributes: map[string]*configschema.Attribute{
+							"size": {
+								Type:     cty.Number,
+								Optional: true,
+							},
+							"mount_point": {
+								Type:     cty.String,
+								Required: true,
+							},
+						},
+					},
+					Optional: true,
+				},
+			},
+			`ami = null # REQUIRED number
+disks = { # OPTIONAL object
+  mount_point = null # REQUIRED string
+  size = null # OPTIONAL number
+}
+`,
+		},
+	}
 
+	v := addHuman{optional: true}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var buf strings.Builder
+			if err := v.writeConfigAttributes(&buf, test.attrs, 0); err != nil {
+				t.Errorf("unexpected error")
+			}
+			if buf.String() != test.expected {
+				fmt.Println(buf.String())
+				t.Errorf("wrong result: %s", cmp.Diff(test.expected, buf.String()))
+			}
+		})
+	}
 }
 
 func TestAdd_writeConfigAttributesFromExisting(t *testing.T) {
+	attrs := map[string]*configschema.Attribute{
+		"ami": {
+			Type:     cty.Number,
+			Required: true,
+		},
+		"boot_disk": {
+			Type:     cty.String,
+			Optional: true,
+		},
+		"password": {
+			Type:      cty.String,
+			Optional:  true,
+			Sensitive: true,
+		},
+		"disks": {
+			NestedType: &configschema.Object{
+				Nesting: configschema.NestingSingle,
+				Attributes: map[string]*configschema.Attribute{
+					"size": {
+						Type:     cty.Number,
+						Optional: true,
+					},
+					"mount_point": {
+						Type:     cty.String,
+						Required: true,
+					},
+				},
+			},
+			Optional: true,
+		},
+	}
 
+	tests := map[string]struct {
+		attrs    map[string]*configschema.Attribute
+		val      cty.Value
+		expected string
+	}{
+		"empty returns nil": {
+			map[string]*configschema.Attribute{},
+			cty.NilVal,
+			"",
+		},
+		"mixed attributes": {
+			attrs,
+			cty.ObjectVal(map[string]cty.Value{
+				"ami":       cty.NumberIntVal(123456),
+				"boot_disk": cty.NullVal(cty.String),
+				"password":  cty.StringVal("i am secret"),
+				"disks": cty.ObjectVal(map[string]cty.Value{
+					"size":        cty.NumberIntVal(50),
+					"mount_point": cty.NullVal(cty.String),
+				}),
+			}),
+			`ami = 123456
+boot_disk = null
+disks = {
+  mount_point = null
+  size = 50
+}
+password = (sensitive)
+`,
+		},
+	}
+
+	v := addHuman{optional: true}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var buf strings.Builder
+			if err := v.writeConfigAttributesFromExisting(&buf, test.val, test.attrs, 0); err != nil {
+				t.Errorf("unexpected error")
+			}
+			if buf.String() != test.expected {
+				t.Errorf("wrong result: %s", cmp.Diff(test.expected, buf.String()))
+			}
+		})
+	}
 }
 
 func TestAdd_writeConfigBlocksFromExisting(t *testing.T) {

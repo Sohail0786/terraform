@@ -402,7 +402,7 @@ func TestAdd_from_state(t *testing.T) {
 				Name: "old",
 			}.Instance(addrs.NoKey).Absolute(addrs.RootModuleInstance),
 			&states.ResourceInstanceObjectSrc{
-				AttrsJSON:    []byte("{\"id\":\"bar\",\"ami\":\"ami-123456\",\"disks\":[{\"mount_point\":\"diska\"}],\"value\":\"bloop\"}"),
+				AttrsJSON:    []byte("{\"id\":\"bar\",\"ami\":\"ami-123456\",\"disks\":[{\"mount_point\":\"diska\",\"size\":null}],\"value\":\"bloop\"}"),
 				Status:       states.ObjectReady,
 				Dependencies: []addrs.ConfigResource{},
 			},
@@ -479,16 +479,14 @@ func TestAdd_from_state(t *testing.T) {
 
 	expected := `resource "test_instance" "new" {
   ami = "ami-123456"
-  disks = [{
-    mount_point = "diska"
-    size        = null
-  }]         
+  disks = [
+    {
+      mount_point = "diska"
+      size        = null
+    },
+  ]
   id    = "bar"
   value = "bloop"
-  network_interface {
-    description  = null
-    device_index = null
-  }
 }
 `
 

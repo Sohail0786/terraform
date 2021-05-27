@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 
 func TestAdd_WriteConfigBlocksFromExisting(t *testing.T) {
 
-	t.Run("NestingMode single", func(t *testing.T) {
+	t.Run("NestingSingle", func(t *testing.T) {
 		v := addHuman{optional: true}
 		val := cty.ObjectVal(map[string]cty.Value{
 			"root_block_device": cty.ObjectVal(map[string]cty.Value{
@@ -28,7 +29,7 @@ func TestAdd_WriteConfigBlocksFromExisting(t *testing.T) {
 `
 
 		if !cmp.Equal(buf.String(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(buf.String(), expected))
+			t.Errorf("wrong output:\n%s", cmp.Diff(expected, buf.String()))
 		}
 	})
 
@@ -57,7 +58,7 @@ root_block_device {
 `
 
 		if !cmp.Equal(buf.String(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(buf.String(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, buf.String()))
 		}
 	})
 
@@ -86,7 +87,105 @@ root_block_device "2" {
 `
 
 		if !cmp.Equal(buf.String(), expected) {
-			t.Fatalf("wrong output:\n%s", cmp.Diff(buf.String(), expected))
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, buf.String()))
+		}
+	})
+}
+
+func TestAdd_WriteConfigNestedTypeAttributeFromExisting(t *testing.T) {
+	t.Run("NestingSingle", func(t *testing.T) {
+		v := addHuman{optional: true}
+		val := cty.ObjectVal(map[string]cty.Value{
+			"disks": cty.ObjectVal(map[string]cty.Value{
+				"mount_point": cty.StringVal("/mnt/foo"),
+				"size":        cty.StringVal("50GB"),
+			}),
+		})
+		schema := addTestSchema(configschema.NestingSingle)
+		var buf strings.Builder
+		v.writeConfigNestedTypeAttributeFromExisting(&buf, "disks", schema.Attributes["disks"], val, 0)
+
+		expected := `disks = {
+  mount_point = "/mnt/foo"
+  size = "50GB"
+}
+`
+
+		if !cmp.Equal(buf.String(), expected) {
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, buf.String()))
+		}
+	})
+
+	t.Run("NestingList", func(t *testing.T) {
+		v := addHuman{optional: true}
+		val := cty.ObjectVal(map[string]cty.Value{
+			"disks": cty.ListVal([]cty.Value{
+				cty.ObjectVal(map[string]cty.Value{
+					"mount_point": cty.StringVal("/mnt/foo"),
+					"size":        cty.StringVal("50GB"),
+				}),
+				cty.ObjectVal(map[string]cty.Value{
+					"mount_point": cty.StringVal("/mnt/bar"),
+					"size":        cty.StringVal("250GB"),
+				}),
+			}),
+		})
+
+		schema := addTestSchema(configschema.NestingList)
+		var buf strings.Builder
+		v.writeConfigNestedTypeAttributeFromExisting(&buf, "disks", schema.Attributes["disks"], val, 0)
+
+		expected := `disks = [
+  {
+    mount_point = "/mnt/foo"
+    size = "50GB"
+  },
+  {
+    mount_point = "/mnt/bar"
+    size = "250GB"
+  },
+]
+`
+
+		if !cmp.Equal(buf.String(), expected) {
+			fmt.Println(buf.String())
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, buf.String()))
+		}
+	})
+
+	t.Run("NestingMap", func(t *testing.T) {
+		v := addHuman{optional: true}
+		val := cty.ObjectVal(map[string]cty.Value{
+			"disks": cty.MapVal(map[string]cty.Value{
+				"foo": cty.ObjectVal(map[string]cty.Value{
+					"mount_point": cty.StringVal("/mnt/foo"),
+					"size":        cty.StringVal("50GB"),
+				}),
+				"bar": cty.ObjectVal(map[string]cty.Value{
+					"mount_point": cty.StringVal("/mnt/bar"),
+					"size":        cty.StringVal("250GB"),
+				}),
+			}),
+		})
+		schema := addTestSchema(configschema.NestingMap)
+		var buf strings.Builder
+		v.writeConfigNestedTypeAttributeFromExisting(&buf, "disks", schema.Attributes["disks"], val, 0)
+
+		expected := `disks = {
+  bar = {
+    mount_point = "/mnt/bar"
+    size = "250GB"
+  },
+  foo = {
+    mount_point = "/mnt/foo"
+    size = "50GB"
+  },
+}
+`
+
+		if !cmp.Equal(buf.String(), expected) {
+			fmt.Println(buf.String())
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, buf.String()))
 		}
 	})
 }

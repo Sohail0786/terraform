@@ -116,6 +116,26 @@ func TestAdd_WriteConfigNestedTypeAttributeFromExisting(t *testing.T) {
 		}
 	})
 
+	t.Run("NestingSingle_sensitive", func(t *testing.T) {
+		v := addHuman{optional: true}
+		val := cty.ObjectVal(map[string]cty.Value{
+			"disks": cty.ObjectVal(map[string]cty.Value{
+				"mount_point": cty.StringVal("/mnt/foo"),
+				"size":        cty.StringVal("50GB"),
+			}),
+		})
+		schema := addTestSchemaSensitive(configschema.NestingSingle)
+		var buf strings.Builder
+		v.writeConfigNestedTypeAttributeFromExisting(&buf, "disks", schema.Attributes["disks"], val, 0)
+
+		expected := `disks = { (sensitive) }
+`
+
+		if !cmp.Equal(buf.String(), expected) {
+			t.Fatalf("wrong output:\n%s", cmp.Diff(expected, buf.String()))
+		}
+	})
+
 	t.Run("NestingList", func(t *testing.T) {
 		v := addHuman{optional: true}
 		val := cty.ObjectVal(map[string]cty.Value{
@@ -213,6 +233,42 @@ func addTestSchema(nesting configschema.NestingMode) *configschema.Block {
 							Type:     cty.String,
 							Optional: true,
 							Computed: true,
+						},
+					},
+				},
+				Nesting: nesting,
+			},
+		},
+	}
+}
+
+// addTestSchemaSensitive returns a schema with a sensitive NestedType and a
+// NestedBlock with sensitive attributes.
+func addTestSchemaSensitive(nesting configschema.NestingMode) *configschema.Block {
+	return &configschema.Block{
+		Attributes: map[string]*configschema.Attribute{
+			"id":  {Type: cty.String, Optional: true, Computed: true},
+			"ami": {Type: cty.String, Optional: true},
+			"disks": {
+				NestedType: &configschema.Object{
+					Attributes: map[string]*configschema.Attribute{
+						"mount_point": {Type: cty.String, Optional: true},
+						"size":        {Type: cty.String, Optional: true},
+					},
+					Nesting: nesting,
+				},
+				Sensitive: true,
+			},
+		},
+		BlockTypes: map[string]*configschema.NestedBlock{
+			"root_block_device": {
+				Block: configschema.Block{
+					Attributes: map[string]*configschema.Attribute{
+						"volume_type": {
+							Type:      cty.String,
+							Optional:  true,
+							Computed:  true,
+							Sensitive: true,
 						},
 					},
 				},

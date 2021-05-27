@@ -291,6 +291,12 @@ func (v *addHuman) writeConfigBlocksFromExisting(buf *strings.Builder, stateVal 
 }
 
 func (v *addHuman) writeConfigNestedTypeAttributeFromExisting(buf *strings.Builder, name string, schema *configschema.Attribute, stateVal cty.Value, indent int) error {
+	if schema.Sensitive {
+		buf.WriteString(strings.Repeat(" ", indent))
+		buf.WriteString(fmt.Sprintf("%s = { (sensitive) }\n", name))
+		return nil
+	}
+
 	switch schema.NestedType.Nesting {
 	case configschema.NestingSingle:
 		buf.WriteString(strings.Repeat(" ", indent))

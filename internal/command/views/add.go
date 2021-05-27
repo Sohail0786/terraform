@@ -158,9 +158,13 @@ func (v *addHuman) writeConfigAttributesFromExisting(buf *strings.Builder, state
 				} else {
 					val = attrS.EmptyValue()
 				}
-				tok := hclwrite.TokensForValue(val)
-				if _, err := tok.WriteTo(buf); err != nil {
-					return err
+				if val.IsMarked() {
+					buf.WriteString("(sensitive")
+				} else {
+					tok := hclwrite.TokensForValue(val)
+					if _, err := tok.WriteTo(buf); err != nil {
+						return err
+					}
 				}
 			}
 			buf.WriteString("\n")
@@ -178,10 +182,15 @@ func (v *addHuman) writeConfigAttributesFromExisting(buf *strings.Builder, state
 				} else {
 					val = attrS.EmptyValue()
 				}
-				tok := hclwrite.TokensForValue(val)
-				if _, err := tok.WriteTo(buf); err != nil {
-					return err
+				if val.IsMarked() {
+					buf.WriteString("(sensitive)")
+				} else {
+					tok := hclwrite.TokensForValue(val)
+					if _, err := tok.WriteTo(buf); err != nil {
+						return err
+					}
 				}
+
 			}
 			buf.WriteString("\n")
 		}
@@ -291,14 +300,13 @@ func (v *addHuman) writeConfigBlocksFromExisting(buf *strings.Builder, stateVal 
 }
 
 func (v *addHuman) writeConfigNestedTypeAttributeFromExisting(buf *strings.Builder, name string, schema *configschema.Attribute, stateVal cty.Value, indent int) error {
-	if schema.Sensitive {
-		buf.WriteString(strings.Repeat(" ", indent))
-		buf.WriteString(fmt.Sprintf("%s = { (sensitive) }\n", name))
-		return nil
-	}
-
 	switch schema.NestedType.Nesting {
 	case configschema.NestingSingle:
+		if schema.Sensitive {
+			buf.WriteString(strings.Repeat(" ", indent))
+			buf.WriteString(fmt.Sprintf("%s = { (sensitive) }\n", name))
+			return nil
+		}
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString(fmt.Sprintf("%s = {\n", name))
 		nestedVal := stateVal.GetAttr(name)
@@ -310,6 +318,13 @@ func (v *addHuman) writeConfigNestedTypeAttributeFromExisting(buf *strings.Build
 	case configschema.NestingList, configschema.NestingSet:
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString(fmt.Sprintf("%s = [\n", name))
+
+		if schema.Sensitive || stateVal.IsMarked() {
+			buf.WriteString(strings.Repeat(" ", indent))
+			buf.WriteString("(sensitive) ]\n")
+			return nil
+		}
+
 		listVals := ctyCollectionValues(stateVal.GetAttr(name))
 		for i := range listVals {
 			buf.WriteString(strings.Repeat(" ", indent+2))
@@ -326,6 +341,13 @@ func (v *addHuman) writeConfigNestedTypeAttributeFromExisting(buf *strings.Build
 	case configschema.NestingMap:
 		buf.WriteString(strings.Repeat(" ", indent))
 		buf.WriteString(fmt.Sprintf("%s = {\n", name))
+
+		if schema.Sensitive || stateVal.IsMarked() {
+			buf.WriteString(strings.Repeat(" ", indent))
+			buf.WriteString("(sensitive) }\n")
+			return nil
+		}
+
 		vals := stateVal.GetAttr(name).AsValueMap()
 		keys := make([]string, 0, len(vals))
 		for key := range vals {
@@ -354,7 +376,14 @@ func (v *addHuman) writeConfigNestedBlockFromExisting(buf *strings.Builder, name
 	switch schema.Nesting {
 	case configschema.NestingSingle, configschema.NestingGroup:
 		buf.WriteString(strings.Repeat(" ", indent))
-		buf.WriteString(fmt.Sprintf("%s {\n", name))
+		buf.WriteString(fmt.Sprintf("%s {", name))
+
+		// If the entire value is marked, don't print any nested attributes
+		if stateVal.IsMarked() {
+			buf.WriteString(" (sensitive) }\n")
+			return nil
+		}
+		buf.WriteString("\n")
 		if err := v.writeConfigAttributesFromExisting(buf, stateVal, schema.Attributes, indent+2); err != nil {
 			return err
 		}
@@ -364,6 +393,11 @@ func (v *addHuman) writeConfigNestedBlockFromExisting(buf *strings.Builder, name
 		buf.WriteString("}\n")
 		return nil
 	case configschema.NestingList, configschema.NestingSet:
+		if stateVal.IsMarked() {
+			buf.WriteString(strings.Repeat(" ", indent))
+			buf.WriteString(fmt.Sprintf("%s { (sensitive) }\n", name))
+			return nil
+		}
 		listVals := ctyCollectionValues(stateVal)
 		for i := range listVals {
 			buf.WriteString(strings.Repeat(" ", indent))
@@ -378,6 +412,12 @@ func (v *addHuman) writeConfigNestedBlockFromExisting(buf *strings.Builder, name
 		}
 		return nil
 	case configschema.NestingMap:
+		// If the entire value is marked, don't print any nested attributes
+		if stateVal.IsMarked() {
+			buf.WriteString(fmt.Sprintf("%s { (sensitive) }\n", name))
+			return nil
+		}
+
 		vals := stateVal.AsValueMap()
 		keys := make([]string, 0, len(vals))
 		for key := range vals {
@@ -386,7 +426,14 @@ func (v *addHuman) writeConfigNestedBlockFromExisting(buf *strings.Builder, name
 		sort.Strings(keys)
 		for _, key := range keys {
 			buf.WriteString(strings.Repeat(" ", indent))
-			buf.WriteString(fmt.Sprintf("%s %q {\n", name, key))
+			buf.WriteString(fmt.Sprintf("%s %q {", name, key))
+			// This entire map element is marked
+			if vals[key].IsMarked() {
+				buf.WriteString(" (sensitive) }\n")
+				return nil
+			}
+			buf.WriteString("\n")
+
 			if err := v.writeConfigAttributesFromExisting(buf, vals[key], schema.Attributes, indent+2); err != nil {
 				return err
 			}
@@ -424,10 +471,19 @@ func ctyCollectionValues(val cty.Value) []cty.Value {
 		return nil
 	}
 
-	ret := make([]cty.Value, 0, val.LengthInt())
+	var len int
+	if val.IsMarked() {
+		val, _ = val.Unmark()
+		len = val.LengthInt()
+	} else {
+		len = val.LengthInt()
+	}
+
+	ret := make([]cty.Value, 0, len)
 	for it := val.ElementIterator(); it.Next(); {
 		_, value := it.Element()
 		ret = append(ret, value)
 	}
+
 	return ret
 }

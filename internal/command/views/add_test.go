@@ -32,7 +32,7 @@ func TestAdd_WriteConfigBlocksFromExisting(t *testing.T) {
 		}
 	})
 
-	t.Run("NestingMode list", func(t *testing.T) {
+	t.Run("NestingList", func(t *testing.T) {
 		v := addHuman{optional: true}
 		val := cty.ObjectVal(map[string]cty.Value{
 			"root_block_device": cty.ListVal([]cty.Value{
@@ -59,7 +59,35 @@ root_block_device {
 		if !cmp.Equal(buf.String(), expected) {
 			t.Fatalf("wrong output:\n%s", cmp.Diff(buf.String(), expected))
 		}
+	})
 
+	t.Run("NestingMap", func(t *testing.T) {
+		v := addHuman{optional: true}
+		val := cty.ObjectVal(map[string]cty.Value{
+			"root_block_device": cty.MapVal(map[string]cty.Value{
+				"1": cty.ObjectVal(map[string]cty.Value{
+					"volume_type": cty.StringVal("foo"),
+				}),
+				"2": cty.ObjectVal(map[string]cty.Value{
+					"volume_type": cty.StringVal("bar"),
+				}),
+			}),
+		})
+		schema := addTestSchema(configschema.NestingMap)
+		var buf strings.Builder
+		v.writeConfigBlocksFromExisting(&buf, val, schema.BlockTypes, 0)
+
+		expected := `root_block_device "1" {
+  volume_type = "foo"
+}
+root_block_device "2" {
+  volume_type = "bar"
+}
+`
+
+		if !cmp.Equal(buf.String(), expected) {
+			t.Fatalf("wrong output:\n%s", cmp.Diff(buf.String(), expected))
+		}
 	})
 }
 

@@ -299,13 +299,13 @@ func (v *addHuman) writeConfigNestedBlockFromExisting(buf *strings.Builder, name
 		buf.WriteString("\n}\n")
 		return nil
 	case configschema.NestingList:
-		buf.WriteString(fmt.Sprintf("%s {\n", name))
-		listVals := stateVal.GetAttr(name).AsValueSlice()
+		listVals := stateVal.AsValueSlice()
 		for i := range listVals {
+			buf.WriteString(fmt.Sprintf("%s {\n", name))
 			v.writeConfigAttributesFromExisting(buf, listVals[i], schema.Attributes, indent+2)
 			v.writeConfigBlocksFromExisting(buf, listVals[i], schema.BlockTypes, indent+2)
+			buf.WriteString("\n}\n")
 		}
-		buf.WriteString("\n}\n")
 		return nil
 	}
 

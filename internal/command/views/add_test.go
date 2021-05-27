@@ -51,9 +51,8 @@ func TestAdd_WriteConfigBlocksFromExisting(t *testing.T) {
 		expected := `root_block_device {
   volume_type = "foo"
 }
-
 root_block_device {
-  volume_type = "bar
+  volume_type = "bar"
 }
 `
 

@@ -145,7 +145,7 @@ func (s ModuleSourceLocal) String() string {
 }
 
 func (s ModuleSourceLocal) ForDisplay() string {
-	return s.String() // the two string representations are identical for this address type
+	return string(s)
 }
 
 // ModuleSourceRegistry is a ModuleSource representing a module listed in a

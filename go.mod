@@ -2,7 +2,7 @@ module github.com/hashicorp/terraform
 
 require (
 	cloud.google.com/go/storage v1.10.0
-	github.com/Azure/azure-sdk-for-go v52.5.0+incompatible
+	github.com/Azure/azure-sdk-for-go v61.0.0+incompatible
 	github.com/Azure/go-autorest/autorest v0.11.18
 	github.com/agext/levenshtein v1.2.2
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190329064014-6e358769c32a
